@@ -1,0 +1,114 @@
+## Codigo para ejecutar el modelo
+### Este recurso carga la función para cual integra el modelo de redes y el modelo economico que 
+
+
+
+### Autor: Carlos Eduardo Gonzalez R. Equipo de Modelacion
+g=gc;rm(list=ls())
+
+
+### Directorios 
+### En este directorio se aloja las funciones, esta carpeta simplemente se ajusta
+setwd("directorio donde se guardan los codigos")
+
+###outputs
+path<- c("directorio donde se guardan los graficos y tablas")
+
+#### Confifuración del modelo 
+### Promedio rendimiento
+ave.y<- X
+### Promedio hectarea
+ave.ha<-X
+
+### mediante loops se evalua diferentes combinaciones posibles de estas dos variables
+### al tiempo.
+range_yields<- (seq(XX,XX,by=1))/100
+range_costos<- (seq(XX,XX,by=1))/100
+
+### Esta funcion ejecuta el modelo de excedentes economicos incorporando los impactos 
+### importandos de la SNA
+source("./Model_asterisco_modelo_sna_integration")
+
+### Creacion de diferentes escenarios de costos y rendimientos, todas las combinaciones posibles
+cm<- expand.grid(range_costos,range_yields)
+colnames(cm)[1]<- "Costos"
+colnames(cm)[2]<- "Rendimientos"
+num_comb<- nrow(cm) ### total de ejecuciones del modelo de excedentes
+
+
+####################################### Modelo economico por ciclos #####################################
+resul_sce<- list()
+
+for(i in 1:nrow(cm)){
+      
+      #combinacion de rendimientos y costos
+      combinations<- cm[i,]
+      
+      # runnig model       
+      m<- sna_carlos(transmission_rate =XX , 
+                     node_number =XX ,
+                  name = XX ,
+                  seed_num =XX , 
+                  sce = XX,
+                  range_yields = XX ,
+                  range_costos = XX, 
+                  prob_success = XX,
+                  elas_supply = XX, 
+                  elas_demand = XX, 
+                  prod_prices = XX,
+                  depre_rate = X,  
+                  discount_rate = XX , 
+                  q = ave.y*(ave.ha*XX), 
+                  cre_exo = XX, ## considerar que es un crecimiento exponencial 
+                  time_inves = X, 
+                  Agg.Value_current = XX, # en moneda local (pesos colombianos, lempiras etc) 
+                  current_dollar = XX, # tasa de cambio
+                  r_d_budget = XX, # presupuesto de investigacion 
+                  rate_poverty = XX, # tasa de pobreza de la region
+                  population = XX, 
+                  elas_poverty = XX)
+      
+      resul_sce[[i]]<- m
+      cat(paste("combination ", i, " it's ready\n", sep = ""))
+      
+}
+
+sce="Optimistic" # "Pessimistic"
+
+#### Extraer datos por combinacion o escenario modelado
+xxx<- lapply(1:num_comb, function(i){
+      
+      r_irr<- unique(resul_sce[[i]][,"irri"])
+      v_vpn<- unique(resul_sce[[i]][,"npv"])
+      poverRE<- unique(resul_sce[[i]][,"rate_reduc"])
+      yield<- unique(resul_sce[[i]][which(resul_sce[[i]]$Change_yield!=0),][,"Change_yield"])
+      costo<- unique(resul_sce[[i]][which(resul_sce[[i]]$Change_cost_he!=0),][,"Change_cost_he"])
+      
+      data.frame(cost=costo,rendi=yield,tir=r_irr,vpn=v_vpn, red_pover=poverRE)
+})
+
+### consolidacion de los resultados por todas las interacciones de los escenarios      
+consolidation<- do.call(rbind,xxx)
+write.csv(consolidation,paste(path,sce,"_consolidation.csv",sep="" ))
+
+### representacion grafica 
+library(lattice)
+png(paste(path,sce,"_irr_combinatios_yield_cost.png", sep = ""),width = 800, height = 600)
+figura<- levelplot(tir ~ cost*rendi, data=consolidation  , 
+                   xlab="Change of Cost" , ylab="Change of yield",
+                   col.regions = heat.colors(100)[length(heat.colors(100)):1], 
+                   main=paste("Tasa Interna de Retorno (TIR)\nSNA(Scale Free) ", sce,sep = ""))
+plot(figura)
+dev.off()
+
+
+png(paste(path,sce,"_impacts_yield_poverty.png", sep = ""),width = 800, height = 600)
+figura<- levelplot(red_pover ~ cost*rendi, data=consolidation  , 
+                   xlab="Change of Cost" , ylab="Change of yield",
+                   col.regions = heat.colors(100)[length(heat.colors(100)):1], 
+                   main=paste("Potencial impacto en reducción de pobreza\n y cambios de productividad\nEscenario: ", sce,sep = ""))
+plot(figura)
+dev.off()
+
+
+
