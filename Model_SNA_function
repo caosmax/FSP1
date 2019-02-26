@@ -1,10 +1,46 @@
-### Autor: Carlos Eduardo Gonzalez. Equipo de Modelacion. 
-
-
-sna_carlos<- function(transmission_rate, node_number, name,seed_num, sce,
-                      range_yields,range_costos,prob_success,elas_supply,elas_demand,
-                      prod_prices, depre_rate,discount_rate,q,
-                      cre_exo){
+sna_carlos<- function(transmission_rate, 
+                      node_number, 
+                      name,
+                      seed_num, 
+                      sce,
+                      range_yields,
+                      range_costos,
+                      prob_success,
+                      elas_supply,
+                      elas_demand,
+                      prod_prices, 
+                      depre_rate,
+                      discount_rate,
+                      q,
+                      cre_exo,
+                      time_inves,
+                      Agg.Value_current,
+                      current_dollar,
+                      r_d_budget,
+                      rate_poverty,
+                      Part_region,
+                      population,
+                      elas_poverty){
+      
+      suppressMessages(library(dplyr))
+      suppressMessages(library(ggplot2))
+      suppressMessages(library(reshape))
+      suppressMessages(library(RColorBrewer))
+      suppressMessages(library(maptools))
+      suppressMessages(library(sp))
+      suppressMessages(library(sna))
+      suppressMessages(library(network))
+      suppressMessages(library(intergraph))
+      suppressMessages(library(FinCal))
+      suppressMessages(library(intergraph))
+      suppressMessages(library(igraph))
+      
+      setwd("Directorio donde se almacenan los codigos")
+      
+      ###outputs
+      path<- c("Directorio donde se almacenan las graficas y tablas")
+      
+      
       g<- igraph::barabasi.game(n = node_number) 
       coins<-c(1,0)
       probabilities = c(transmission_rate, 1-transmission_rate)
@@ -99,17 +135,17 @@ sna_carlos<- function(transmission_rate, node_number, name,seed_num, sce,
                   plot_time_series(infected, m)
                   m = m + 1}
       }
-      
+
       library(animation)
-      
+
       saveGIF({
-            ani.options(interval = 0.5, convert = 
+            ani.options(interval = 0.5, convert =
                               shQuote("C:/Program Files/ImageMagick-7.0.4-Q16/convert.exe"))
             # start the plot
             plot_gif(infected)
       }, movie.name = paste(sce,"Difussion.gif",sep = ""),ani.width = 800, ani.height = 500)
-      
-      
+
+
       # yr<- length(infected)
       nodes<-list()
       ### extrayendo datos 
@@ -125,9 +161,8 @@ sna_carlos<- function(transmission_rate, node_number, name,seed_num, sce,
       ### preparando datos de acumulacion de adopcion proveniendo de la Red 
       n<- rbind(nodes) %>% as.data.frame()
       n<- unlist(nodes)
-      length(nodes)
-      cfiles<- data.frame(yr=1:length(nodes), nodesAcum=n)
-      cfiles$rate_adop<- (cfiles$nodesAcum/node_number)*100
+      cfiles<- data.frame(yr=1:length(nodes), nodesAcum=(unlist(nodes)/max(unlist(nodes))))
+      cfiles$rate_adop<- cfiles$nodesAcum
       write.csv(cfiles, paste(path,sce,"_datos_adopt_sf.csv", sep = ""))
       rm(aa)
       
@@ -138,74 +173,39 @@ sna_carlos<- function(transmission_rate, node_number, name,seed_num, sce,
       
       ### Esta funcion ejecuta el modelo de excedentes economicos incorporando los impactos 
       ### importandos de la SNA
-      source("C:/Users/CEGONZALEZ/Documents/GitHub/gfsf_project/_scripts/funcionSurplusEconomicModel.R")
-      
-      ### Creacion de diferentes escenarios de costos y rendimientos, todas las combinaciones posibles
-      cm<- expand.grid(range_costos,range_yields)
-      colnames(cm)[1]<- "Costos"
-      colnames(cm)[2]<- "Rendimientos"
-      num_comb<- nrow(cm) ### total de ejecuciones del modelo de excedentes 
+      source("directorio/Model_asterisco_modelo_economico")
       
       
       resul_sce<- list()
+
       ### Importando datos de SNA (a) y los periodos es los que se desarrolla (b)
-      adop<- cfiles[,2]
+      adop<- cfiles[,3]
       y<- cfiles[,1]
       y<- max(y)
-      # 
-      # i=1
-      for(i in 1:nrow(cm)){
-            #combinacion de rendimientos y costos
-            combinations<- cm[i,]
-            
-            #runing model 
-            m<- modeltest(prob_success =prob_success,
-                          elas_supply =elas_supply,
-                          change_yield = combinations$Rendimientos,
-                          elas_demand =elas_demand ,
-                          prod_prices =300 ,
-                          input_cost_changes= combinations$Costos,
-                          depre_rate = depre_rate ,
-                          discount_rate =discount_rate ,
-                          cre_exo =cre_exo ,
-                          q =1800 ,
-                          yr =y , 
-                          adop= adop,
-                          time_inves =6 ,
-                          r_d_budget =5000000 )
-            
-            cat(paste("combination ", i, " it's ready\n", sep = ""))
-            resul_sce[[i]]<- m
-            
-      }
+      periodo<- max(y)
       
-      
-      #### Extraer datos por combinacion o escenario modelado
-      xxx<- lapply(1:num_comb, function(i){
-            
-            r_irr<- unique(resul_sce[[i]][,"irri"])
-            v_vpn<- unique(resul_sce[[i]][,"npv"])
-            yield<- unique(resul_sce[[i]][which(resul_sce[[i]]$Change_yield!=0),][,"Change_yield"])
-            costo<- unique(resul_sce[[i]][which(resul_sce[[i]]$Change_cost_he!=0),][,"Change_cost_he"])
-            data.frame(cost=costo,rendi=yield,tir=r_irr,vpn=v_vpn)
-      })
-      
-      ### consolidacion de los resultados por todas las interacciones de los escenarios      
-      consolidation<- do.call(rbind,xxx)
-      write.csv(consolidation,paste(path,sce,"_consolidation.csv",sep="" ))
-      
-      ### representacion grafica 
-      library(lattice)
-      png(paste(path,sce,"_irr_combinatios_yield_cost.png", sep = ""),width = 800, height = 600)
-      figura<- levelplot(tir ~ cost*rendi, data=consolidation  , 
-                xlab="Change of Cost" , ylab="Change of yield",
-                col.regions = heat.colors(100)[length(heat.colors(100)):1], 
-                main=paste("Tasa Interna de Retorno (TIR)\nSNA(Scale Free) ", sce,sep = ""))
-      plot(figura)
-      dev.off()
-      
-      # return(consolidation)     
-      
-}
+	#runing model
+      m<- modeltest(prob_success = prob_success,
+                    elas_supply = elas_supply,
+                    elas_demand =elas_demand ,
+                    change_yield = change_yield,
+                    prod_prices = prod_prices,
+                    input_cost_changes = input_cost_changes,
+                    depre_rate =depre_rate ,
+                    discount_rate =discount_rate ,
+                    cre_exo =cre_exo,
+                    q = q,
+                    y=periodo,
+                    adop =adop ,
+                    time_inves = time_inves,
+                    r_d_budget =r_d_budget ,
+                    elas_poverty = elas_poverty,
+                    rate_poverty =rate_poverty,
+                    Agg.Value_current = Agg.Value_current,
+                    current_dollar = current_dollar,
+                    population = population,
+                    Part_region = Part_region )
 
+
+} 
 
