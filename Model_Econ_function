@@ -1,0 +1,62 @@
+
+### Autor: Carlos Edo. Gonzalez. Equipo, Modelamiento. 
+
+modeltest<- function(prob_success,
+                     elas_supply,
+                     elas_demand,
+                     change_yield,
+                     prod_prices,
+                     input_cost_changes,
+                     depre_rate,
+                     discount_rate,
+                     cre_exo,
+                     q,
+                     yr,
+                     adop,
+                     time_inves,
+                     r_d_budget){
+      
+      m<- data.frame(Yrs=1:yr,
+                 E_ofer= elas_supply, 
+                 E_demand= elas_demand,
+                 Change_yield= change_yield,
+                 Change_equi_yield= change_yield/elas_supply, # cambios rendimientos/elas productor
+                 Change_cost_he= input_cost_changes,
+                 Change_equi_cost= input_cost_changes/(1+ change_yield),
+                 Change_net= (change_yield/elas_supply)-(input_cost_changes/(1+change_yield)),
+                 Prob_exito= prob_success,
+                 Tasa_adop=adop,
+                 Tasa_dep=depre_rate,
+                 Cantidades= q,
+                 precio=prod_prices)
+                 
+     require(dplyr)
+     m<- m %>% mutate(K= Change_net*Prob_exito*Tasa_adop*Tasa_dep,
+                      Z= (E_ofer*K)/(E_ofer+E_demand),
+                      precio=prod_prices,
+                      Tasa_exter_creci=cre_exo,
+                      Change_exc_total=(K*precio*Cantidades*(1+0.5*(Z*E_demand))),
+                      Change_exc_pro= precio*Cantidades*(K-Z)*(1+0.5*(Z*E_demand)),
+                      Change_exc_consu=precio*Cantidades*Z*(1+(0.5*Z*E_demand)),
+                      Change_exc_consu=precio*Cantidades*Z*(1+(0.5*Z*E_demand)),
+                      Costos_R_I=0)
+     ### data R&D
+     rd<- data.frame(Yrs=1:time_inves,E_ofer=0,E_demand=0,Change_yield=0,Change_equi_yield=0,Change_cost_he=0,
+                     Change_equi_cost=0,Change_net=0, Prob_exito=0,Tasa_adop=0,Tasa_dep=0,
+                     Cantidades=0 ,K=0, Z=0, precio=0,Tasa_exter_creci=0, Change_exc_total=0,
+                     Change_exc_pro=0,Change_exc_consu=0,Costos_R_I=r_d_budget/time_inves)
+     
+      
+     
+     ###Agregate tiempo para agregar costos y tiempos de inversion
+     xfiles<- rbind(rd,m) # aplir las bases de datos
+     xfiles<- xfiles %>% mutate(bef_net=Change_exc_total-Costos_R_I)
+     ## valor presente neto 
+     require(FinCal)
+     xfiles<- xfiles %>% mutate(totalB=sum(bef_net), totalC=sum(Costos_R_I),Rela_Bef_Cost=totalB/totalC ) 
+     xfiles$npv<- npv(r = discount_rate, xfiles[,"bef_net"])
+     xfiles$irri<- irr(cf = xfiles[,"bef_net"])   
+
+ return(xfiles)
+} 
+
