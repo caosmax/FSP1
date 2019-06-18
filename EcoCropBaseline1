@@ -1,0 +1,174 @@
+### Ecocrop version carlos edo-tiny adjusting of Julian Ramirez codes
+### Baseline 
+
+# g=gc;rm(list = ls())
+# 
+# ### libraries
+# suppressMessages(library(rgdal))
+# suppressMessages(library(raster))
+# suppressMessages(library(maptools))
+# suppressMessages(library(sp))
+# 
+# 
+# #### directories
+# cropDir <- "//dapadfs.cgiarad.org/workspace_cluster_6/Socioeconomia/GF_and_SF/FP1/Sui/Ecocrop/output2/baseline"  #Output de los datos
+# cropParamFile <- "//dapadfs.cgiarad.org/workspace_cluster_6/Socioeconomia/GF_and_SF/FP1/Sui/Ecocrop/all_Colombia_parametros.csv" 
+# cDir <- "//dapadfs.cgiarad.org/workspace_cluster_6/Socioeconomia/GF_and_SF/FP1/Sui/climate/tablas_clima_CS/baseline/raster"
+
+### loading functions related with testing suitability by pixel
+source("E:/CEGONZALEZ/Documents/GitHub/gfsf_project/_scripts/Evaluated_Suitability_Core_Codes.R")
+
+#### funcion para hacer documento txt con la informacion base
+makeLogFile <- function(filePathName, climPath, sowDat, harDat, cropname, 
+                        Gmin, Gmax, Tkmp, Tmin, Topmin, Topmax, Tmax, Rmin, 
+                        Ropmin, Ropmax, Rmax) {
+  con <- file(filePathName, "w")
+  writeLines(paste("CLIMATE_FILES:", climPath), con)
+  writeLines(paste("SOWING_DATE:", sowDat), con)
+  writeLines(paste("HARVEST_DATE:", harDat), con)
+  writeLines(paste("CROP:", cropname), con)
+  writeLines(paste("GMIN:", Gmin), con)
+  writeLines(paste("GMAX:", Gmax), con)
+  writeLines(paste("TKMP:", Tkmp), con)
+  writeLines(paste("TMIN:", Tmin), con)
+  writeLines(paste("TOPMIN:", Topmin), con)
+  writeLines(paste("TOPMAX:", Topmax), con)
+  writeLines(paste("TMAX:", Tmax), con)
+  writeLines(paste("RMIN:", Rmin), con)
+  writeLines(paste("ROPMIN:", Ropmin), con)
+  writeLines(paste("ROPMAX:", Ropmax), con)
+  writeLines(paste("RMAX:", Rmax), con)
+  close(con)
+}
+
+### loading functions related with testing suitability by pixel
+source("E:/CEGONZALEZ/Documents/GitHub/gfsf_project/_scripts/Evaluated_Suitability_Core_Codes.R")
+
+
+### funcion 
+suitCalc_Carlos<- function(climPath, sowDat, harDat, 
+                           Gmin,Gmax,Tkmp,Tmin,Topmin,
+                           Topmax,Tmax,Rmin,Ropmin,
+                           Ropmax,Rmax, outfolder='', 
+                           cropname='',ext=".asc",cropClimate=F) {
+  
+  outfolder = paste(cropDir, "/analyses/runs", sep="")
+  logFileName <- paste(outfolder, "/", cropname, "-parameters.model", sep="")
+  
+  #Creating the log file
+  createLog <- makeLogFile(logFileName,climPath,sowDat ='',harDat = '',cropname,Gmin, Gmax, Tkmp, Tmin, 
+                           Topmin, Topmax, Tmax, Rmin, Ropmin, Ropmax, Rmax) #sowDat, harDat, 
+  
+  #Creating the stack of the whole list of variables
+  if (is.na(Rmin)) {
+    climateStack <- stack(stack(paste(climPath, "/tmean", c(1:12), ext, sep="")), 
+                          stack(paste(climPath, "/tmin", c(1:12), ext, sep="")))
+  } else {
+    climateStack <- stack(stack(paste(climPath, "/tmean", c(1:12), ext, sep="")), 
+                          stack(paste(climPath, "/tmin", c(1:12), ext, sep="")), 
+                          stack(paste(climPath, "/prec", c(1:12), ext, sep="")))
+  }
+  
+  #Calculating regression models between Rmin-Ropmin and Ropmax-Rmax
+  if (is.na(Rmin)) {
+    rainLeftM <- NA; rainLeftB <- NA
+    rainRightM <- NA; rainRightB <- NA
+  } else {
+    rainLeftReg <- lsfit(x=c(Rmin,Ropmin), y=c(0,1))
+    rainLeftM <- rainLeftReg$coefficients[2]
+    rainLeftB <- rainLeftReg$coefficients[1]
+    rainRightReg <- lsfit(x=c(Ropmax,Rmax), y=c(1,0))
+    rainRightM <- rainRightReg$coefficients[2]
+    rainRightB <- rainRightReg$coefficients[1]
+  }
+  Tkill <- Tkmp + 40
+  
+  Gavg <- round(mean(c(Gmin, Gmax)) / 30)
+  
+  if (is.na(Gavg)) {
+    cat("Growing season taken from reported sowing and harvest dates \n")
+    #Checking existence of sowing and harvest date
+    if (!file.exists(sowDat)) {stop("The sowing dates file does not exist, please check...")}
+    if (!file.exists(harDat)) {stop("The harvest dates file does not exist, please check...")}
+    rsSow <- raster(sowDat)
+    rsHar <- raster(harDat)
+    #load sow and har rasters
+    if (cropClimate) {climateStack <- crop(climateStack,rsSow)}
+  } else {
+    cat("Growing season is", Gavg, "months \n")
+  }
+  
+  #params object
+  params <- list()
+  params$Gavg <- Gavg; params$Tkill <- Tkill; params$Tmin <- Tmin
+  params$Topmin <- Topmin; params$Topmax <- Topmax; params$Tmax <- Tmax
+  params$Rmin <- Rmin; params$Ropmin <- Ropmin; params$Ropmax <- Ropmax
+  params$Rmax <- Rmax; params$rainLeftM <- rainLeftM; params$rainLeftB <- rainLeftB
+  params$rainRightM <- rainRightM; params$rainRightB <- rainRightB
+  
+  #Final grid naming and creation
+  pSuitName <- paste(outfolder, "/", cropname, "_psuitability.tif", sep="")
+  tSuitName <- paste(outfolder, "/", cropname, "_tsuitability.tif", sep="")
+  fSuitName <- paste(outfolder, "/", cropname, "_suitability.tif", sep="")
+  cumPptName <- paste(outfolder, "/", cropname, "_gsrain.tif", sep="")
+  meanTName <- paste(outfolder, "/", cropname, "_gstmean.tif", sep="")
+  
+  pSuitRaster <- raster(climateStack, 0) #filename(pSuitRaster) <- pSuitName
+  tSuitRaster <- raster(climateStack, 0) #filename(tSuitRaster) <- tSuitName
+  fSuitRaster <- raster(climateStack, 0) #filename(fSuitRaster) <- fSuitName
+  cumPptRaster <- raster(climateStack, 0) #filename(fSuitRaster) <- fSuitName
+  meanTRaster <- raster(climateStack, 0) #filename(fSuitRaster) <- fSuitName
+  
+  bs <- blockSize(climateStack, n=41, minblocks=2)
+  
+  # b=1
+  for (b in 1:bs$n) {
+    cat(" ",round(b/bs$n*100,2),"%",sep="")
+    iniCell <- 1+(bs$row[b]-1)*ncol(pSuitRaster)
+    finCell <- (bs$row[b]+bs$nrow[b]-1)*ncol(pSuitRaster)
+    allCells <- iniCell:finCell
+    validCells <- allCells[which(!is.na(climateStack[[1]][allCells]))]
+    validXY <- xyFromCell(climateStack,validCells)
+    
+    if (length(validCells) > 0) {
+      rowVals <- extract(climateStack,validCells)
+      if (is.na(Gavg)) {
+        rowVals <- cbind(rowVals,sow=extract(rsSow,validXY))
+        rowVals <- cbind(rowVals,har=extract(rsHar,validXY))
+        rasVals <- apply(rowVals, 1, suitFun_sowVar, params)
+      } else {
+        rasVals <- apply(rowVals, 1, suitFun_sowFix, params)
+      }
+      precVecSuit <- rasVals[1,]
+      tempVecSuit <- rasVals[2,]
+      finlVecSuit <- rasVals[3,]
+      cumPptVec <- rasVals[4,]
+      meanTVec <- rasVals[5,]
+      rm(rasVals)
+    } else {
+      precVecSuit <- NA
+      tempVecSuit <- NA
+      finlVecSuit <- NA
+      cumPptVec <- NA
+      meanTVec <- NA
+    }
+    
+    pSuitRaster[validCells] <- precVecSuit
+    tSuitRaster[validCells] <- tempVecSuit
+    fSuitRaster[validCells] <- finlVecSuit
+    cumPptRaster[validCells] <- cumPptVec
+    meanTRaster[validCells] <- meanTVec
+    
+    #pbStep(pb, b)
+  }
+  
+  pSuitRaster <- writeRaster(pSuitRaster, pSuitName, format='GTiff', overwrite=TRUE)
+  tSuitRaster <- writeRaster(tSuitRaster, tSuitName, format='GTiff', overwrite=TRUE)
+  fSuitRaster <- writeRaster(fSuitRaster, fSuitName, format='GTiff', overwrite=TRUE)
+  cumPptRaster <- writeRaster(cumPptRaster, cumPptName, format='GTiff', overwrite=TRUE)
+  meanTRaster <- writeRaster(meanTRaster, meanTName, format='GTiff', overwrite=TRUE)
+  
+  return(stack(pSuitRaster, tSuitRaster, fSuitRaster,cumPptRaster,meanTRaster))
+  
+  
+}
