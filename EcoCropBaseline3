@@ -1,0 +1,49 @@
+### Ecocrop version carlos edo
+### Baseline 
+
+g=gc;rm(list = ls())
+
+### libraries
+suppressMessages(library(rgdal))
+suppressMessages(library(raster))
+suppressMessages(library(maptools))
+suppressMessages(library(sp))
+
+
+#### directories
+cropDir <- "//dapadfs.cgiarad.org/workspace_cluster_6/Socioeconomia/GF_and_SF/FP1/Sui/Ecocrop/output2/baseline"  #Output de los datos
+cropParamFile <- "//dapadfs.cgiarad.org/workspace_cluster_6/Socioeconomia/GF_and_SF/FP1/Sui/Ecocrop/all_Colombia_parametros.csv" 
+cDir <- "//dapadfs.cgiarad.org/workspace_cluster_6/Socioeconomia/GF_and_SF/FP1/Sui/climate/tablas_clima_CS/baseline/raster"
+
+#### files
+### cultivo 
+crop <- "crop"
+cropPar <- read.csv(cropParamFile, header=T)
+nTest <- ncol(cropPar) #Number of test into file crop parameters
+testName <- names(cropPar)[nTest] #Name of the last test
+# cropname<- paste(crop, "_", testName, sep="")
+cropname<-  testName
+
+source("E:/CEGONZALEZ/Documents/GitHub/gfsf_project/_scripts/SuiCarlosEdoCodes.R")
+
+mo<- suitCalc_Carlos(climPath = cDir,
+                sowDat ='' ,
+                harDat ='' ,
+                Gmin =   cropPar[1,nTest],
+                Gmax =   cropPar[2,nTest],
+                Tkmp =   cropPar[3,nTest],
+                Tmin =   cropPar[4,nTest],
+                Topmin = cropPar[5,nTest],
+                Topmax = cropPar[6,nTest],
+                Tmax =   cropPar[7,nTest],
+                Rmin =   cropPar[8,nTest],
+                Ropmin = cropPar[9,nTest],
+                Ropmax = cropPar[10,nTest],
+                Rmax =   cropPar[11,nTest],
+                outfolder = paste(cropDir, "/analyses/runs", sep=""),
+                ext = ".asc",
+                cropname = testName,
+                cropClimate =F )
+
+
+
